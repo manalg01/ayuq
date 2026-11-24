@@ -13,7 +13,7 @@ class ReadingRow(Base):
     __tablename__ = "readings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     patient_id: Mapped[str] = mapped_column(String(32), index=True)
     glucose_mgdl: Mapped[float] = mapped_column(Float)
     glucose_trend: Mapped[float] = mapped_column(Float)
@@ -35,7 +35,7 @@ class AlertRow(Base):
     __tablename__ = "alerts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, index=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     patient_id: Mapped[str] = mapped_column(String(32), index=True)
     hybrid_score: Mapped[int] = mapped_column(Integer)
     explanation: Mapped[str] = mapped_column(Text)
@@ -47,7 +47,7 @@ class ProfileRow(Base):
 
     patient_id: Mapped[str] = mapped_column(String(32), primary_key=True)
     data_json: Mapped[Dict[str, Any]] = mapped_column(JSON)
-    updated_at: Mapped[datetime] = mapped_column(DateTime)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class SimulatorStateRow(Base):

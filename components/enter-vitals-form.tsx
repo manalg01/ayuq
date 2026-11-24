@@ -226,7 +226,7 @@ export function EnterVitalsForm() {
           <span className="text-accent">Primary inputs</span> match the{" "}
           <strong className="text-foreground/90">Pima Indians diabetes</strong> training CSV (
           <code className="text-foreground/80">backend/data/diabetes.csv</code>
-          ). The random forest uses pregnancies (female only), glucose, BP, skin, BMI, DPF, age
+          ). When the model artifacts are installed, the random forest uses pregnancies (female only), glucose, BP, skin, BMI, DPF, age
           {diagnosedDiabetic === "yes" ? ", plus insulin" : " (insulin sent as 0 if no diagnosis)"}{" "}
           and your optional CGM refinements below.
         </div>
@@ -385,7 +385,7 @@ export function EnterVitalsForm() {
               <Loader2 size={14} className="animate-spin" /> Processing…
             </span>
           ) : (
-            "Submit & cross-check with trained model"
+            "Submit vitals & calculate risk"
           )}
         </motion.button>
       </form>
@@ -413,7 +413,7 @@ export function EnterVitalsForm() {
           >
             <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground">
               <CheckCircle2 size={14} className="text-green-500" />
-              Risk assessment + Pima RF
+              Backend risk assessment · saved reading {result.id} · {result.patient_id}
             </div>
 
             <div className="grid grid-cols-3 gap-3 text-center">
@@ -478,7 +478,7 @@ export function EnterVitalsForm() {
               <div className="border border-accent/20 bg-accent/5 p-4 font-mono text-xs">
                 <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
                   <Brain size={12} className="text-accent" />
-                  Trained model cross-check (Pima RF)
+                  Model signal source
                 </div>
                 {result.ml_model_source === "random_forest" &&
                   result.diabetes_ml_probability != null && (

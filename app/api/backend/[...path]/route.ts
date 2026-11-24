@@ -24,7 +24,6 @@ const HOP_BY_HOP = new Set([
 function backendBase(): string {
   const raw =
     process.env.BACKEND_URL?.trim() ||
-    process.env.NEXT_PUBLIC_API_URL?.trim() ||
     "http://127.0.0.1:8000";
   return raw.replace(/\/+$/, "");
 }
@@ -60,7 +59,7 @@ async function proxy(req: NextRequest, segments: string[]): Promise<NextResponse
     const localTarget = /127\.0\.0\.1|localhost/i.test(base);
     const hint = localTarget
       ? " Local: start FastAPI in another terminal: `bash backend/run-api.sh` (from repo root), leave it running, then retry."
-      : " Set BACKEND_URL (or NEXT_PUBLIC_API_URL) to your live FastAPI HTTPS base URL (required on Vercel; cannot use localhost there).";
+      : " Set BACKEND_URL to your live FastAPI HTTPS base URL (required on Vercel; cannot use localhost there).";
     return NextResponse.json(
       {
         detail: `Cannot reach API at ${base} (${msg}).${hint}`,

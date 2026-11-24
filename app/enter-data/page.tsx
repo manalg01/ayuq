@@ -27,8 +27,9 @@ export default function EnterDataPage() {
         <p className="mb-6 font-mono text-sm leading-relaxed text-muted-foreground">
           Enter the <strong className="text-foreground/90">same eight clinical fields</strong> as the
           training dataset (Pima format — <strong className="text-foreground/90">order matters</strong>
-          ), then optionally refine with CGM-style timing. Sugarfree cross-checks with the on-server random
-          forest, blends rule-based hypoglycemia risk, and can use Gemini for explanations. Optional:
+          ), then optionally refine with CGM-style timing. The backend calculates rule-based
+          hypoglycemia risk and reports whether an installed on-server random forest or its
+          deterministic fallback produced the ML score. Gemini can provide explanations. Optional:
           upload a meal photo for a rough carb estimate (vision model — not a substitute for carb
           counting).
         </p>

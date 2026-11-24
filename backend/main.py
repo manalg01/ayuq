@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from database import AlertRow, ProfileRow, ReadingRow, SimulatorStateRow, make_session_factory
 from explain import fallback_explanation, generate_chat_reply, generate_explanation
@@ -53,7 +54,6 @@ SessionLocal = make_session_factory(DATABASE_URL)
 
 import pickle
 import numpy as np
-import google.generativeai as genai
 
 _ML_MODEL = None
 _ML_SCALER = None
@@ -131,6 +131,13 @@ def norm_path_patient_id(patient_id: str) -> str:
     """Match dashboard IDs (P001) even if the URL used p001."""
     s = (patient_id or "").strip().upper()
     return s if s else "P001"
+
+
+def utc_datetime(value: datetime) -> datetime:
+    """SQLite drops timezone offsets; persisted application timestamps are UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def unpack_factors(fac) -> Tuple[List[Any], Optional[float]]:
@@ -247,7 +254,7 @@ def row_to_reading_out(row: ReadingRow) -> ReadingOut:
     dp, src = _ml_meta_from_factors(row.factors_json)
     return ReadingOut(
         id=row.id,
-        timestamp=row.timestamp,
+        timestamp=utc_datetime(row.timestamp),
         patient_id=row.patient_id,
         glucose_mgdl=row.glucose_mgdl,
         glucose_trend=row.glucose_trend,
@@ -447,8 +454,14 @@ def post_chat(body: ChatIn, db: Session = Depends(get_db)):
 
 
 @app.get("/health")
-def health():
-    return {"ok": True, "service": "sugarfree-api"}
+def health(db: Session = Depends(get_db)):
+    """Readiness check for the API and its persistent database."""
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Database unavailable") from e
+    return {"ok": True, "service": "sugarfree-api", "database": "ok"}
 
 
 @app.get("/readings/{patient_id}", response_model=List[ReadingOut])
@@ -489,7 +502,7 @@ def get_alerts(patient_id: str, db: Session = Depends(get_db)):
     return [
         AlertOut(
             id=r.id,
-            timestamp=r.timestamp,
+            timestamp=utc_datetime(r.timestamp),
             patient_id=r.patient_id,
             hybrid_score=r.hybrid_score,
             explanation=r.explanation,
@@ -606,7 +619,11 @@ def get_profile(patient_id: str, db: Session = Depends(get_db)):
     row = db.get(ProfileRow, patient_id)
     if not row:
         raise HTTPException(404, "No profile")
-    return {"patient_id": row.patient_id, **row.data_json, "updated_at": row.updated_at.isoformat()}
+    return {
+        "patient_id": row.patient_id,
+        **row.data_json,
+        "updated_at": utc_datetime(row.updated_at).isoformat(),
+    }
 
 
 @app.get("/simulator/{patient_id}")
@@ -757,6 +774,8 @@ def predict_diabetes_risk(body: MLPredictRequest):
     try:
         gemini_api_key = os.environ.get("GEMINI_API_KEY")
         if gemini_api_key:
+            import google.generativeai as genai
+
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel("gemini-2.5-flash")
             prompt = f"A patient has the following Pima diabetes factors [pregnancies, glucose, bp, skin, insulin, bmi, dpf, age]: {body.input}. The random forest model predicted a risk probability of {probability:.2f} ({risk_level} risk). Keep your response under 3 sentences and explain why in plain English for the patient in 2nd person."

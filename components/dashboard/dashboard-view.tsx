@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Activity, ArrowLeft, Radio, AlertTriangle, Timer } from "lucide-react";
-import { fetchLatest, fetchProfile, fetchReadings } from "@/lib/api";
-import { computeRiskDetailed, type ProfileContext } from "@/lib/risk";
+import { fetchLatest, fetchReadings } from "@/lib/api";
 import type { Reading } from "@/lib/types";
 import { GlucoseChart } from "./glucose-chart";
 import { RiskMeter } from "./risk-meter";
@@ -31,68 +30,6 @@ function formatTtl(mins: number | null | undefined) {
   return `~${Math.round(mins)} min`;
 }
 
-function bucketTod(hour: number) {
-  if (hour >= 5 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 17) return "afternoon";
-  if (hour >= 17 && hour < 22) return "evening";
-  return "night";
-}
-
-function profileForRisk(raw: Record<string, unknown> | null): ProfileContext {
-  if (!raw) return null;
-  const rest = { ...raw };
-  delete rest.patient_id;
-  delete rest.updated_at;
-  return rest;
-}
-
-function buildMockSeries(patientId: string, profile: ProfileContext): Reading[] {
-  const now = Date.now();
-  const out: Reading[] = [];
-  for (let i = 72; i >= 0; i--) {
-    const date = new Date(now - i * 5 * 60 * 1000);
-    const ts = date.toISOString();
-    const hour = date.getHours();
-    const phase = i / 10;
-    let g = 108 + 22 * Math.sin(phase) - Math.max(0, i - 40) * 0.35;
-    let trend = -0.35 + 0.12 * Math.sin(i / 6);
-    if (patientId === "P002") {
-      g -= 8;
-      trend -= 0.25;
-    }
-    if (patientId === "P003") {
-      g -= 5;
-      trend -= 0.15;
-    }
-    g = Math.max(55, Math.min(200, g));
-    const base = {
-      timestamp: ts,
-      glucose_mgdl: Math.round(g * 10) / 10,
-      glucose_trend: Math.round(trend * 100) / 100,
-      last_meal_mins_ago: Math.min(300, 60 + (i % 50) * 3),
-      meal_carbs_g: 40,
-      last_insulin_units: 4,
-      insulin_mins_ago: Math.min(180, 70 + (i % 40)),
-      activity_level: i % 25 < 3 ? "high" : "rest",
-      time_of_day: bucketTod(hour),
-      patient_id: patientId,
-    };
-    const d = computeRiskDetailed(base, profile);
-    out.push({
-      id: 1000 + i,
-      ...base,
-      rule_score: d.rule_score,
-      ml_score: d.ml_score,
-      hybrid_score: d.hybrid_score,
-      factors: d.factors,
-      explanation: d.hybrid_score >= 40 ? "Demo fallback: elevated risk from mock stream." : null,
-      alert_type: d.alert_type,
-      time_to_low_minutes: d.time_to_low_minutes,
-    });
-  }
-  return out;
-}
-
 function normalizePatientId(raw: string): string {
   const t = raw.trim().toUpperCase();
   return t || "P001";
@@ -104,6 +41,7 @@ export function DashboardView() {
   const [live, setLive] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [lastFetchAt, setLastFetchAt] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
 
   /** Same patient ID as Log vitals (stored when you submit the form). */
   useEffect(() => {
@@ -113,13 +51,7 @@ export function DashboardView() {
   }, []);
 
   const load = useCallback(async () => {
-    let savedProfile: ProfileContext = null;
-    try {
-      const raw = await fetchProfile(patientId);
-      savedProfile = profileForRisk(raw);
-    } catch {
-      savedProfile = null;
-    }
+    setLoading(true);
     try {
       const [list, latest] = await Promise.all([
         fetchReadings(patientId, 72),
@@ -138,8 +70,10 @@ export function DashboardView() {
     } catch {
       setLive(false);
       setLastFetchAt(new Date());
-      setApiError("API unreachable — showing deterministic mock stream.");
-      setReadings(buildMockSeries(patientId, savedProfile));
+      setApiError("API CONNECTION ERROR — live patient data could not be loaded. Check the FastAPI service and BACKEND_URL.");
+      setReadings([]);
+    } finally {
+      setLoading(false);
     }
   }, [patientId]);
 
@@ -218,7 +152,7 @@ export function DashboardView() {
                 </h1>
                 <p className="mt-1 max-w-xl font-mono text-xs leading-relaxed text-muted-foreground">
                   Trend, meals, insulin, activity, and hybrid risk — with minutes-to-threshold and
-                  factor breakdown. Updates about every 5 seconds.
+                  factor breakdown. Updates about every 8 seconds.
                   <span className="mt-2 block text-[10px] text-foreground/90">
                     Active patient matches <strong className="text-foreground">Log vitals</strong>{" "}
                     (saved in this browser). Use the exact same patient ID when submitting readings.
@@ -273,17 +207,18 @@ export function DashboardView() {
               ))}
               <span className="flex items-center gap-1.5 border border-border px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
                 <Radio size={12} className={live ? "text-green-500" : "text-amber-500"} />
-                {live ? "API" : "Mock"}
+                {live ? "LIVE" : "API ERROR"}
               </span>
               </div>
             </div>
           </div>
           {apiError && (
-            <p className="mt-3 font-mono text-[10px] text-amber-600 dark:text-amber-400">
+            <p role="alert" className="mt-3 border border-red-500/40 bg-red-500/5 p-3 font-mono text-[10px] text-red-600 dark:text-red-400">
               {apiError}
             </p>
           )}
-          {live && !hasReadings && !apiError && (
+          {loading && <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Loading live readings…</p>}
+          {live && !hasReadings && !apiError && !loading && (
             <p className="mt-3 border border-border bg-muted/40 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
               <span className="text-foreground">No readings in the database for {patientId}</span>{" "}
               in the last 72 hours — gauges stay empty until the first save. Use{" "}

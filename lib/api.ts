@@ -129,7 +129,34 @@ export async function postProfile(data: Record<string, unknown>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  return parse(res);
+  const saved = await parse<{ ok: boolean; patient_id: string }>(res);
+  if (saved.ok !== true || saved.patient_id !== data.patient_id) {
+    throw new Error("Backend did not confirm saving this patient's profile.");
+  }
+  return saved;
+}
+
+function isReading(value: unknown): value is Reading {
+  if (!value || typeof value !== "object") return false;
+  const reading = value as Partial<Reading>;
+  return (
+    Number.isInteger(reading.id) &&
+    typeof reading.timestamp === "string" &&
+    Number.isFinite(Date.parse(reading.timestamp)) &&
+    typeof reading.patient_id === "string" &&
+    Number.isFinite(reading.glucose_mgdl) &&
+    Number.isFinite(reading.rule_score) &&
+    Number.isFinite(reading.ml_score) &&
+    Number.isFinite(reading.hybrid_score) &&
+    Array.isArray(reading.factors) &&
+    reading.factors.every(
+      (factor) =>
+        factor &&
+        typeof factor.key === "string" &&
+        typeof factor.label === "string" &&
+        Number.isFinite(factor.points),
+    )
+  );
 }
 
 export async function postReading(
@@ -141,7 +168,15 @@ export async function postReading(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return parse<Reading>(res);
+  const reading = await parse<unknown>(res);
+  if (!isReading(reading)) {
+    throw new Error("Backend returned an invalid reading response; the reading was not confirmed.");
+  }
+  const expectedPatientId = String(body.patient_id ?? "P001").trim().toUpperCase();
+  if (reading.patient_id !== expectedPatientId) {
+    throw new Error("Backend returned a reading for a different patient ID.");
+  }
+  return reading;
 }
 
 export async function fetchProfile(patientId: string) {

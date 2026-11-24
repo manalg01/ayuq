@@ -54,36 +54,6 @@ function predictionLevelFromRiskPercent(riskPercent: number): "Low" | "Medium" |
   return "High";
 }
 
-function coreReasonForPrediction(
-  latestReading: Reading | null,
-  predictionLevel: "Low" | "Medium" | "High" | null,
-): string {
-  if (!latestReading || !predictionLevel) {
-    return "Add a fresh vitals entry to compute a clear reason for the current prediction level.";
-  }
-
-  const topFactors = [...(latestReading.factors ?? [])]
-    .sort((a, b) => b.points - a.points)
-    .slice(0, 2)
-    .map((f) => f.label)
-    .filter(Boolean);
-
-  const trendText =
-    latestReading.glucose_trend < -1.5
-      ? "fast downward glucose trend"
-      : latestReading.glucose_trend < -0.5
-        ? "downward glucose trend"
-        : latestReading.glucose_trend > 1
-          ? "rising glucose trend"
-          : "stable glucose trend";
-
-  if (topFactors.length > 0) {
-    return `${predictionLevel} prediction is mainly driven by ${topFactors.join(" and ")} with ${trendText}.`;
-  }
-
-  return `${predictionLevel} prediction is based on glucose ${latestReading.glucose_mgdl} mg/dL and ${trendText}.`;
-}
-
 export function AlertsView() {
   const [patientId, setPatientId] = useState<string>("P001");
   const [isHydrated, setIsHydrated] = useState(false);
@@ -218,10 +188,11 @@ export function AlertsView() {
                 <span className="text-foreground" suppressHydrationWarning>
                   {isHydrated ? patientId : "P001"}
                 </span>
-                . We
-                generate alerts when hybrid risk is 40 or above and store an AI-ready narrative from{" "}
-                <span className="text-foreground">Gemini</span> (or built-in guidance if{" "}
-                <code className="text-accent">GEMINI_API_KEY</code> is unset).
+                . Alerts are stored when the backend alert risk reaches 40/100. Explanations use{" "}
+                <span className="text-foreground">Gemini</span> when configured; otherwise built-in guidance is stored.
+              </p>
+              <p className={`mt-2 font-mono text-[10px] uppercase tracking-widest ${err ? "text-red-500" : "text-green-600 dark:text-green-400"}`}>
+                {err ? "API CONNECTION ERROR · DATABASE ALERTS UNAVAILABLE" : "LIVE · DATABASE ALERTS"}
               </p>
               <p className="mt-2 font-mono text-[11px] text-muted-foreground/90">
                 {latestReading
@@ -364,7 +335,7 @@ export function AlertsView() {
               AI triage insight
             </p>
             <p className="mt-2 font-mono text-xs leading-relaxed text-foreground">
-              Latest signal is <span className="text-accent">{computed.latest.hybrid_score}/100</span>.{" "}
+              Latest stored alert risk score is <span className="text-accent">{computed.latest.hybrid_score}/100</span>.{" "}
               {computed.latest.hybrid_score >= 40
                 ? "This is in critical band. Contact your doctor immediately and keep fast-acting carbs ready while you monitor closely."
                 : "Prioritize trend confirmation and follow your care plan; use the summary below to share with caregiver/doctor quickly."}
@@ -379,19 +350,20 @@ export function AlertsView() {
                 </p>
               </div>
               <div className="border border-foreground/15 bg-background/40 p-3 font-mono text-[11px] text-muted-foreground">
-                <p className="uppercase tracking-widest text-[10px]">Share-ready details</p>
+                <p className="uppercase tracking-widest text-[10px]">Latest patient reading</p>
                 <p className="mt-1 text-foreground">
-                  Glucose {computed.latest.glucose_mgdl} mg/dL, trend {computed.latest.glucose_trend} mg/dL/min, score{" "}
-                  {computed.latest.hybrid_score}/100.
+                  {latestReading
+                    ? `Glucose ${latestReading.glucose_mgdl} mg/dL, trend ${latestReading.glucose_trend} mg/dL/min, reading hybrid score ${latestReading.hybrid_score}/100.`
+                    : `Persisted alert risk score ${computed.latest.hybrid_score}/100.`}
                 </p>
               </div>
             </div>
             <div className="mt-3 border border-foreground/20 bg-background/40 p-3 font-mono text-[11px]">
               <p className="uppercase tracking-widest text-[10px] text-muted-foreground">
-                Core reason for prediction level
+                Latest alert explanation
               </p>
               <p className="mt-1 text-foreground">
-                {coreReasonForPrediction(latestReading, computed.predictionLevel)}
+                {computed.latest.explanation}
               </p>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
